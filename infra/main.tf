@@ -27,6 +27,7 @@ data "aws_subnets" "default" {
 
 module "ci_build_farm" {
   source        = "./modules/ci_build_farm"
+  aws_region    = var.aws_region
   project_name  = var.project_name
   vpc_id        = data.aws_vpc.default.id
   subnet_ids    = data.aws_subnets.default.ids
