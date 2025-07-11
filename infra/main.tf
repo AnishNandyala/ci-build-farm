@@ -14,7 +14,6 @@ terraform {
   }
 }
 
-/*
 module "ci_build_farm" {
   source        = "./modules/ci_build_farm"
   project_name  = var.project_name
@@ -24,4 +23,3 @@ module "ci_build_farm" {
   instance_type = var.instance_type
   agent_image   = var.agent_image
 }
-*/
