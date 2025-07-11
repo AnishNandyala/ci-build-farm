@@ -25,7 +25,10 @@ echo "🗑️  Initializing Terraform backend..."
 terraform init -input=false
 
 echo "🔥 Destroying all Terraform-managed infrastructure..."
-terraform destroy -auto-approve -var-file=terraform.tfvars
+terraform destroy \
+  -target=module.ci_build_farm \
+  -auto-approve \
+  -var-file=terraform.tfvars
 
 echo "🚮 Teardown complete! All resources removed."
 

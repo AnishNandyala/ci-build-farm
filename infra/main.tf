@@ -35,3 +35,9 @@ module "ci_build_farm" {
   instance_type = var.instance_type
   agent_image   = var.agent_image
 }
+
+module "ci_build_artifacts" {
+  source = "./modules/artifacts_bucket"
+  aws_region = var.aws_region
+  project_name = var.project_name
+}
