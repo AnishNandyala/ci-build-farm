@@ -1,8 +1,12 @@
+##### SQS Queue #####
+
 resource "aws_sqs_queue" "job_queue" {
   name = "${var.project_name}-jobs"
   visibility_timeout_seconds = 300
   message_retention_seconds  = 86400
 }
+
+##### IAM #####
 
 resource "aws_iam_role" "ec2_role" {
   name               = "${var.project_name}-agent-role"
@@ -67,6 +71,53 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_role.name
 }
 
+data "aws_iam_policy_document" "lambda_assume" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+resource "aws_iam_role" "lambda_role" {
+  name               = "${var.project_name}-lambda-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+resource "aws_iam_role_policy" "lambda_autoscaling" {
+  name = "${var.project_name}-lambda-autoscaling"
+  role = aws_iam_role.lambda_role.id
+
+  policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:SetDesiredCapacity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*:*:*"
+    }
+  ]
+}
+POLICY
+}
+
+##### Auto Scaling Group #####
+
 resource "aws_autoscaling_group" "agents" {
   name                      = "${var.project_name}-asg"
   max_size                  = var.max_agents
@@ -98,6 +149,8 @@ resource "aws_autoscaling_group" "agents" {
     create_before_destroy = true
   }
 }
+
+##### EC2 Instance Launch Template and Image #####
 
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -133,4 +186,72 @@ resource "aws_launch_template" "agent_lt" {
       Name = "${var.project_name}-agent"
     }
   }
+}
+
+##### Lambda #####
+
+data "archive_file" "scale_up_zip" {
+  type        = "zip"
+  source_file = "${path.module}/lambdas/scale_up_lambda.py"
+  output_path = "${path.module}/lambdas/scale_up.zip"
+}
+
+data "archive_file" "scale_down_zip" {
+  type        = "zip"
+  source_file = "${path.module}/lambdas/scale_down_lambda.py"
+  output_path = "${path.module}/lambdas/scale_down.zip"
+}
+
+resource "aws_lambda_function" "scale_up" {
+  function_name = "${var.project_name}-scale-up"
+  handler       = "scale_up_lambda.handler"
+  runtime       = "python3.9"
+  role          = aws_iam_role.lambda_role.arn
+
+  filename      = data.archive_file.scale_up_zip.output_path
+  source_code_hash = data.archive_file.scale_up_zip.output_base64sha256
+
+  environment {
+    variables = {
+      ASG_NAME        = aws_autoscaling_group.agents.name
+      DESIRED_CAPACITY = tostring(var.max_agents)
+    }
+  }
+}
+
+resource "aws_lambda_function" "scale_down" {
+  function_name = "${var.project_name}-scale-down"
+  handler       = "scale_down_lambda.handler"
+  runtime       = "python3.9"
+  role          = aws_iam_role.lambda_role.arn
+
+  filename      = data.archive_file.scale_down_zip.output_path
+  source_code_hash = data.archive_file.scale_down_zip.output_base64sha256
+
+  environment {
+    variables = {
+      ASG_NAME = aws_autoscaling_group.agents.name
+    }
+  }
+}
+
+##### S3 Bucket Trigger & Notification #####
+
+resource "aws_lambda_permission" "allow_s3" {
+  statement_id  = "AllowS3Invoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.scale_down.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = var.artifacts_bucket_arn
+}
+
+resource "aws_s3_bucket_notification" "teardown" {
+  bucket = var.artifacts_bucket_id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.scale_down.arn
+    events              = ["s3:ObjectCreated:*"]
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3]
 }

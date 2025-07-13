@@ -34,6 +34,9 @@ module "ci_build_farm" {
   max_agents    = var.max_agents
   instance_type = var.instance_type
   agent_image   = var.agent_image
+
+  artifacts_bucket_arn = module.ci_build_artifacts.bucket_arn
+  artifacts_bucket_id  = module.ci_build_artifacts.bucket_id
 }
 
 module "ci_build_artifacts" {
