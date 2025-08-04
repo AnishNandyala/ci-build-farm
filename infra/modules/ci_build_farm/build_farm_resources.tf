@@ -66,6 +66,11 @@ data "aws_iam_policy_document" "ec2_policy" {
   }
 }
 
+resource "aws_iam_role_policy_attachment" "ssm_core" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_instance_profile" "ec2_profile" {
   name = "${var.project_name}-agent-profile"
   role = aws_iam_role.ec2_role.name
@@ -97,8 +102,9 @@ resource "aws_iam_role_policy" "lambda_autoscaling" {
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [
-        "autoscaling:SetDesiredCapacity"
+      "Action":[
+        "autoscaling:SetDesiredCapacity",
+        "autoscaling:DescribeAutoScalingGroups"
       ],
       "Resource": "*"
     },
@@ -110,6 +116,16 @@ resource "aws_iam_role_policy" "lambda_autoscaling" {
         "logs:PutLogEvents"
       ],
       "Resource": "arn:aws:logs:*:*:*"
+    },
+    {
+      "Effect":"Allow",
+      "Action":[
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:GetQueueUrl"
+      ],
+      "Resource": "${aws_sqs_queue.job_queue.arn}"
     }
   ]
 }
@@ -177,6 +193,7 @@ resource "aws_launch_template" "agent_lt" {
       agent_image = var.agent_image
       aws_region    = var.aws_region
       project_name  = var.project_name
+      artifacts_bucket_id = var.artifacts_bucket_id
     })
   )
 
@@ -215,6 +232,8 @@ resource "aws_lambda_function" "scale_up" {
     variables = {
       ASG_NAME        = aws_autoscaling_group.agents.name
       DESIRED_CAPACITY = tostring(var.max_agents)
+      ASG_READY_TIMEOUT  = tostring(var.asg_ready_timeout)
+      ASG_POLL_INTERVAL  = tostring(var.asg_poll_interval)
     }
   }
 }
@@ -245,13 +264,47 @@ resource "aws_lambda_permission" "allow_s3" {
   source_arn    = var.artifacts_bucket_arn
 }
 
-resource "aws_s3_bucket_notification" "teardown" {
-  bucket = var.artifacts_bucket_id
 
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.scale_down.arn
-    events              = ["s3:ObjectCreated:*"]
+##### CloudWatch Alarms #####
+
+resource "aws_cloudwatch_metric_alarm" "scale_down_on_empty" {
+  alarm_name          = "${var.project_name}-scale-down-on-empty"
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  datapoints_to_alarm = 1
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+
+  dimensions = {
+    QueueName = aws_sqs_queue.job_queue.name
   }
 
-  depends_on = [aws_lambda_permission.allow_s3]
+  alarm_actions = [
+    aws_sns_topic.scale_down.arn
+  ]
+
+  treat_missing_data = "notBreaching"
+}
+
+##### SNS #####
+
+resource "aws_sns_topic" "scale_down" {
+  name = "${var.project_name}-scale-down"
+}
+
+resource "aws_sns_topic_subscription" "scale_down_lambda" {
+  topic_arn = aws_sns_topic.scale_down.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.scale_down.arn
+}
+
+resource "aws_lambda_permission" "allow_sns_invoke_scale_down" {
+  statement_id  = "AllowSNSInvokeScaleDown"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.scale_down.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.scale_down.arn
 }

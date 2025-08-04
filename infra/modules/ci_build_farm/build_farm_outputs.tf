@@ -7,3 +7,7 @@ output "queue_arn" {
   description = "ARN of the SQS queue"
   value       = aws_sqs_queue.job_queue.arn
 }
+
+output "scale_down_sns_arn" {
+    value = aws_sns_topic.scale_down.arn
+}

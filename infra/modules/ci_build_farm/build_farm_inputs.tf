@@ -13,3 +13,14 @@ variable "artifacts_bucket_id" {
   type        = string
   description = "Name/ID of the artifacts bucket"
 }
+variable "asg_ready_timeout" {
+  type        = number
+  default     = 300
+  description = "Seconds to wait for the ASG to report an InService instance"
+}
+
+variable "asg_poll_interval" {
+  type        = number
+  default     = 10
+  description = "Seconds between ASG status polls in the scale-up Lambda"
+}

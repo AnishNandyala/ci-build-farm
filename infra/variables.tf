@@ -9,3 +9,15 @@ variable "instance_type" {
   default = "t2.micro"
 }
 variable "agent_image" { type = string }
+variable "artifacts_bucket_id" {
+  type        = string
+  description = "Name of the S3 bucket for artifacts"
+}
+variable "asg_ready_timeout" {
+  type    = number
+  default = 300
+}
+variable "asg_poll_interval" {
+  type    = number
+  default = 10
+}

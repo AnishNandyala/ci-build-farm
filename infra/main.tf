@@ -37,6 +37,8 @@ module "ci_build_farm" {
 
   artifacts_bucket_arn = module.ci_build_artifacts.bucket_arn
   artifacts_bucket_id  = module.ci_build_artifacts.bucket_id
+  asg_ready_timeout     = var.asg_ready_timeout
+  asg_poll_interval     = var.asg_poll_interval
 }
 
 module "ci_build_artifacts" {
