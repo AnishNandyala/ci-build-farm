@@ -126,6 +126,16 @@ resource "aws_iam_role_policy" "lambda_autoscaling" {
         "sqs:GetQueueUrl"
       ],
       "Resource": "${aws_sqs_queue.job_queue.arn}"
+    },
+    {
+      "Effect":"Allow",
+      "Action": [
+          "sqs:SendMessage",
+          "sqs:GetQueueUrl"
+      ],
+      "Resource": [
+          "${aws_sqs_queue.job_queue.arn}"
+        ]
     }
   ]
 }
@@ -234,6 +244,7 @@ resource "aws_lambda_function" "scale_up" {
       DESIRED_CAPACITY = tostring(var.max_agents)
       ASG_READY_TIMEOUT  = tostring(var.asg_ready_timeout)
       ASG_POLL_INTERVAL  = tostring(var.asg_poll_interval)
+      JOB_QUEUE_URL = aws_sqs_queue.job_queue.url
     }
   }
 }

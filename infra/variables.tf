@@ -21,3 +21,8 @@ variable "asg_poll_interval" {
   type    = number
   default = 10
 }
+variable "portal_allowed_origins" {
+  type    = list(string)
+  default = ["http://localhost:3000"] # dev default; override per env in terraform.tfvars
+  description = "Allowed CORS origins for the portal frontend"
+}

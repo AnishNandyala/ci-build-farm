@@ -17,3 +17,8 @@ output "artifacts_bucket_arn" {
   description = "Artifacts bucket ARN"
   value       = module.ci_build_artifacts.bucket_arn
 }
+
+output "portal_api_endpoint" {
+  description = "Base endpoint URL for the Portal HTTP API"
+  value       = module.portal_api.portal_api_endpoint
+}

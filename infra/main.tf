@@ -46,3 +46,12 @@ module "ci_build_artifacts" {
   aws_region = var.aws_region
   project_name = var.project_name
 }
+
+module "portal_api" {
+  source = "./modules/portal_api"
+  aws_region = var.aws_region
+  project_name = var.project_name
+  scale_up_invoke_arn = module.ci_build_farm.scale_up_invoke_arn
+  scale_up_function_name = module.ci_build_farm.scale_up_function_name
+  allowed_origins = var.portal_allowed_origins
+}
