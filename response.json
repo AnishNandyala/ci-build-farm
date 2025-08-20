@@ -1,0 +1,1 @@
+{"statusCode": 200, "body": "{\"job_id\": \"1755713155\", \"status\": \"scaling_started\", \"asg\": \"ci-build-farm-asg\", \"desired_capacity\": 1}"}
